@@ -5,11 +5,13 @@ import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PowerManager;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.RemoteViews;
@@ -71,32 +73,60 @@ public class MonitorService extends AccessibilityService {
             }
         }
 
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED){
+            Log.i("WINDOW_CONTENT_CHANGED", String.valueOf(event.getEventType()));
+        }
+        if (eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED){
+            Log.i("TYPE_WINDOWS_CHANGED", String.valueOf(event.getEventType()));
+        }
+
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             AccessibilityNodeInfo nodeInfo = event.getSource();
 
-            if (null != nodeInfo) {
-                mNodeInfoList.clear();
-                traverseNode(nodeInfo);
-                if (mContainsLucky && !mLuckyClicked) {
-                    int size = mNodeInfoList.size();
-                    if (size > 0) {
-                        /** step1: get the last hongbao cell to fire click action */
-                        AccessibilityNodeInfo cellNode = mNodeInfoList.get(size - 1);
-                        cellNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                        mContainsLucky = false;
-                        mLuckyClicked = true;
-                    }
-                }
-                if (mContainsOpenLucky) {
-                    int size = mNodeInfoList.size();
-                    if (size > 0) {
-                        /** step2: when hongbao clicked we need to open it, so fire click action */
-                        AccessibilityNodeInfo cellNode = mNodeInfoList.get(size - 1);
-                        cellNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                        mContainsOpenLucky = false;
-                    }
-                }
+//            if (null != nodeInfo) {
+//                mNodeInfoList.clear();
+//                traverseNode(nodeInfo);
+//                if (mContainsLucky && !mLuckyClicked) {
+//                    int size = mNodeInfoList.size();
+//                    if (size > 0) {
+//                        /** step1: get the last hongbao cell to fire click action */
+//                        AccessibilityNodeInfo cellNode = mNodeInfoList.get(size - 1);
+//                        cellNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+//                        mContainsLucky = false;
+//                        mLuckyClicked = true;
+//                    }
+//                }
+//                if (mContainsOpenLucky) {
+//                    int size = mNodeInfoList.size();
+//                    if (size > 0) {
+//                        /** step2: when hongbao clicked we need to open it, so fire click action */
+//                        AccessibilityNodeInfo cellNode = mNodeInfoList.get(size - 1);
+//                        cellNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+//                        mContainsOpenLucky = false;
+//                    }
+//                }
+//            }
+             System.out.println("TYPE_WINDOW_STATE_CHANGED --> "+event.getClassName());
+            if ("com.tencent.mm.ui.LauncherUI".equals(event.getClassName())) {
+                // 在聊天界面,去点中红包
+                checkKey2();
+            } else if ("com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyReceiveUI"
+                    .equals(event.getClassName())) {
+                // 点中了红包，下一步就是去拆红包
+                checkKey1();
+            } else if ("com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI"
+                    .equals(event.getClassName())) {
+                // 拆完红包后看详细的纪录界面
+
+                Intent intent = new Intent();
+                intent.setAction(Intent.ACTION_MAIN);
+                intent.addCategory(Intent.CATEGORY_HOME);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+
+                // ((Vibrator)getSystemService(Context.VIBRATOR_SERVICE)).vibrate(500);
             }
+
         }
     }
 
@@ -116,32 +146,36 @@ public class MonitorService extends AccessibilityService {
 
     }
 
-    private void traverseNode(AccessibilityNodeInfo node) {
-        if (null == node) return;
-
-        final int count = node.getChildCount();
-        if (count > 0) {
-            for (int i = 0; i < count; i++) {
-                AccessibilityNodeInfo childNode = node.getChild(i);
-                traverseNode(childNode);
-            }
-        } else {
-            CharSequence text = node.getText();
-            if (null != text && text.length() > 0) {
-                String str = text.toString();
-                if (str.contains("领取红包")) {
-                    mContainsLucky = true;
-                    AccessibilityNodeInfo cellNode = node.getParent().getParent().getParent();
-                    if (null != cellNode) mNodeInfoList.add(cellNode);
-                }
-
-                if (str.contains("拆红包")) {
-                    mContainsOpenLucky = true;
-                    mNodeInfoList.add(node);
-                }
-            }
-        }
-    }
+//    private void traverseNode(AccessibilityNodeInfo node) {
+//        if (null == node) return;
+//
+//        Log.i("AccessibilityNodeInfo","viewIdName:"+node.getViewIdResourceName()+" "+
+//        "text:"+node.getText()+" "+ node.isClickable());
+//
+//        final int count = node.getChildCount();
+//        if (count > 0) {
+//            for (int i = 0; i < count; i++) {
+//                AccessibilityNodeInfo childNode = node.getChild(i);
+//                traverseNode(childNode);
+//            }
+//        } else {
+//            CharSequence text = node.getText();
+//            if (null != text && text.length() > 0) {
+//                String str = text.toString();
+//                if (str.contains("领取红包")||str.contains("查看红包")) {
+//                    mContainsLucky = true;
+//                    AccessibilityNodeInfo cellNode = node.getParent().getParent().getParent().getParent();
+//                    if (null != cellNode) mNodeInfoList.add(cellNode);
+//                }
+//
+//                if (str.contains("拆红包")) {
+//                    mContainsOpenLucky = true;
+//                    mNodeInfoList.add(node);
+//                }
+//
+//            }
+//        }
+//    }
 
     public List<String> getText(Notification notification) {
         if (null == notification) return null;
@@ -191,6 +225,60 @@ public class MonitorService extends AccessibilityService {
 
         return text;
     }
+
+
+    private void checkKey1() {
+        AccessibilityNodeInfo nodeInfo = getRootInActiveWindow();
+        if (nodeInfo == null) {
+
+            return;
+        }
+        List<AccessibilityNodeInfo> list = nodeInfo
+                .findAccessibilityNodeInfosByText("拆红包"); // 获取包含 拆红包
+        // 文字的控件，模拟点击事件，拆开红包
+        for (AccessibilityNodeInfo n : list) {
+            n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        }
+    }
+
+    private void checkKey2() {
+        AccessibilityNodeInfo nodeInfo = getRootInActiveWindow();
+        if (nodeInfo == null) {
+
+            return;
+        }
+        List<AccessibilityNodeInfo> list = nodeInfo
+                .findAccessibilityNodeInfosByText("领取红包"); // 找到聊天界面中包含 领取红包
+        // 字符的控件
+        if (list.isEmpty()) {
+//            list = nodeInfo.findAccessibilityNodeInfosByText("[微信红包]");
+//            for (AccessibilityNodeInfo n : list) {
+//
+//                n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+//                break;
+//            }
+        } else {
+            // 最新的红包领起
+            for (int i = list.size() - 1; i >= 0; i--) {
+                AccessibilityNodeInfo parent = list.get(i).getParent().getParent().getParent().getParent();
+
+                try {
+                    // 调用performAction(AccessibilityNodeInfo.ACTION_CLICK)触发点击事件
+                    parent.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+
+                    return;
+                } catch (Exception e) {
+
+                    e.printStackTrace();
+                }
+
+            }
+        }
+
+    }
+
+
+
 
     @Override
     public void onInterrupt() {
