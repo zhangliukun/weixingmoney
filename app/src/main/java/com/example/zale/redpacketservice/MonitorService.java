@@ -57,19 +57,6 @@ public class MonitorService extends AccessibilityService {
 
                     }
                 }
-                if (null != textList && textList.size() > 0) {
-                    for (String text : textList) {
-                        if (!TextUtils.isEmpty(text) && text.contains("我的电脑")) {
-                            final PendingIntent pendingIntent = notification.contentIntent;
-                            try {
-                                pendingIntent.send();
-                            } catch (PendingIntent.CanceledException e) {
-                            }
-                            break;
-                        }
-
-                    }
-                }
             }
         }
 
@@ -81,8 +68,13 @@ public class MonitorService extends AccessibilityService {
         }
 
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            AccessibilityNodeInfo nodeInfo = event.getSource();
 
+
+            /**
+             * 方式一：采用暴力根节点搜索法，直接将可见于不可见的节点的id都拿来遍历搜索
+             * 此法能搜到不可见的内容
+             */
+//            AccessibilityNodeInfo nodeInfo = event.getSource();
 //            if (null != nodeInfo) {
 //                mNodeInfoList.clear();
 //                traverseNode(nodeInfo);
@@ -106,6 +98,10 @@ public class MonitorService extends AccessibilityService {
 //                    }
 //                }
 //            }
+
+            /**
+             * 方式二：通过类名来获取事件，然后通过在遍历可见窗口的所有红包
+             */
              System.out.println("TYPE_WINDOW_STATE_CHANGED --> "+event.getClassName());
             if ("com.tencent.mm.ui.LauncherUI".equals(event.getClassName())) {
                 // 在聊天界面,去点中红包
@@ -130,22 +126,10 @@ public class MonitorService extends AccessibilityService {
         }
     }
 
-    private void unlockScreen() {
-        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        PowerManager.WakeLock wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK
-                | PowerManager.ACQUIRE_CAUSES_WAKEUP
-                | PowerManager.ON_AFTER_RELEASE, "MyWakeLock");
 
-        wakeLock.acquire();
-
-        KeyguardManager keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        final KeyguardManager.KeyguardLock keyguardLock = keyguardManager.newKeyguardLock("MyKeyguardLock");
-        keyguardLock.disableKeyguard();
-
-
-
-    }
-
+    /**
+     * 方式一的遍历
+     */
 //    private void traverseNode(AccessibilityNodeInfo node) {
 //        if (null == node) return;
 //
@@ -177,56 +161,10 @@ public class MonitorService extends AccessibilityService {
 //        }
 //    }
 
-    public List<String> getText(Notification notification) {
-        if (null == notification) return null;
 
-        RemoteViews views = notification.bigContentView;
-        if (views == null) views = notification.contentView;
-        if (views == null) return null;
-
-        // Use reflection to examine the m_actions member of the given RemoteViews object.
-        // It's not pretty, but it works.
-        List<String> text = new ArrayList<String>();
-        try {
-            Field field = views.getClass().getDeclaredField("mActions");
-            field.setAccessible(true);
-
-            @SuppressWarnings("unchecked")
-            ArrayList<Parcelable> actions = (ArrayList<Parcelable>) field.get(views);
-
-            // Find the setText() and setTime() reflection actions
-            for (Parcelable p : actions) {
-                Parcel parcel = Parcel.obtain();
-                p.writeToParcel(parcel, 0);
-                parcel.setDataPosition(0);
-
-                // The tag tells which type of action it is (2 is ReflectionAction, from the source)
-                int tag = parcel.readInt();
-                if (tag != 2) continue;
-
-                // View ID
-                parcel.readInt();
-
-                String methodName = parcel.readString();
-                if (null == methodName) {
-                    continue;
-                } else if (methodName.equals("setText")) {
-                    // Parameter type (10 = Character Sequence)
-                    parcel.readInt();
-
-                    // Store the actual string
-                    String t = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(parcel).toString().trim();
-                    text.add(t);
-                }
-                parcel.recycle();
-            }
-        } catch (Exception e) {
-        }
-
-        return text;
-    }
-
-
+    /**
+     * 方式二的遍历，此法可能无法捕获不可见的红包
+     */
     private void checkKey1() {
         AccessibilityNodeInfo nodeInfo = getRootInActiveWindow();
         if (nodeInfo == null) {
@@ -278,7 +216,78 @@ public class MonitorService extends AccessibilityService {
     }
 
 
+    /**
+     * 低版本android中获取通知状态栏中的text
+     * @param notification
+     * @return
+     */
+    public List<String> getText(Notification notification) {
+        if (null == notification) return null;
 
+        RemoteViews views = notification.bigContentView;
+        if (views == null) views = notification.contentView;
+        if (views == null) return null;
+
+        // Use reflection to examine the m_actions member of the given RemoteViews object.
+        // It's not pretty, but it works.
+        List<String> text = new ArrayList<String>();
+        try {
+            Field field = views.getClass().getDeclaredField("mActions");
+            field.setAccessible(true);
+
+            @SuppressWarnings("unchecked")
+            ArrayList<Parcelable> actions = (ArrayList<Parcelable>) field.get(views);
+
+            // Find the setText() and setTime() reflection actions
+            for (Parcelable p : actions) {
+                Parcel parcel = Parcel.obtain();
+                p.writeToParcel(parcel, 0);
+                parcel.setDataPosition(0);
+
+                // The tag tells which type of action it is (2 is ReflectionAction, from the source)
+                int tag = parcel.readInt();
+                if (tag != 2) continue;
+
+                // View ID
+                parcel.readInt();
+
+                String methodName = parcel.readString();
+                if (null == methodName) {
+                    continue;
+                } else if (methodName.equals("setText")) {
+                    // Parameter type (10 = Character Sequence)
+                    parcel.readInt();
+
+                    // Store the actual string
+                    String t = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(parcel).toString().trim();
+                    text.add(t);
+                }
+                parcel.recycle();
+            }
+        } catch (Exception e) {
+        }
+
+        return text;
+    }
+
+    /**
+     * 点亮屏幕
+     */
+    private void unlockScreen() {
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        PowerManager.WakeLock wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK
+                | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                | PowerManager.ON_AFTER_RELEASE, "MyWakeLock");
+
+        wakeLock.acquire();
+
+        KeyguardManager keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        final KeyguardManager.KeyguardLock keyguardLock = keyguardManager.newKeyguardLock("MyKeyguardLock");
+        keyguardLock.disableKeyguard();
+
+
+
+    }
 
     @Override
     public void onInterrupt() {
